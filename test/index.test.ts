@@ -2,65 +2,92 @@ import { Paginator, PaginateConfig, paginate } from "../lib";
 import { describe, beforeAll, expect, test, afterAll } from "@jest/globals";
 import knex, { Knex } from "knex";
 
-interface User {
+interface Item {
   id: number;
   name: string;
 }
 
 let database: Knex;
 
-async function paging(table: string, order: "asc" | "desc") {
-  return test(`paging ${table} ${order}`, async () => {
-    const pageSize = 2;
-    const query = database<User>(table).select("*");
-    const paginateConfig: PaginateConfig = {
-      cursorColumn: "id",
-      order,
-      orderByColumn: "name",
-      pageSize: 2,
-    };
-    const paginator = new Paginator(query.clone(), paginateConfig);
-    const referenceData = await paginate(query.clone(), {
-      ...paginateConfig,
-      pageSize: 16,
-    });
+function getData(options: string[]) {
+  const permutations: string[][] = [];
 
-    let referenceCursor = 0;
-
-    const movePage = async (direction: "next" | "previous") => {
-      let page = [] as User[];
-      if (direction === "next") {
-        page = await paginator.next();
-      } else {
-        page = await paginator.previous();
-        referenceCursor -= pageSize * 2;
-      }
-
-      // check page against reference data
-      for (let i = 0; i < pageSize; i++) {
-        expect(page[i].id).toBe(referenceData[referenceCursor].id);
-        referenceCursor += 1;
-      }
-    };
-
-    let i = 1;
-    while (referenceCursor < referenceData.length - 1) {
-      if (i % 3 === 0) {
-        await movePage("previous");
-      } else {
-        await movePage("next");
-      }
-      i++;
+  const permute = (solution: string[]) => {
+    if (solution.length > options.length - 1) {
+      permutations.push(solution);
+      return;
     }
 
-    i = 1;
-    while (referenceCursor > pageSize) {
-      if (i % 3 === 0) {
-        await movePage("next");
-      } else {
-        await movePage("previous");
-      }
-      i++;
+    for (let i = 0; i < options.length; i++) {
+      permute(solution.concat([options[i]]));
+    }
+  };
+
+  permute([]);
+
+  return permutations.map((p) => {
+    const res: Item[] = [];
+    for (let i = 0; i < p.length; i++) {
+      res.push({ id: i, name: p[i] });
+    }
+    return res;
+  });
+}
+
+async function page(
+  iteration: number,
+  tableData: Item[],
+  order: "asc" | "desc"
+) {
+  return test(`paging ${JSON.stringify(tableData)} on ${order}`, async () => {
+    const table = `table_${iteration}_${order}`;
+    try {
+      await database.schema.createTable(table, (t) => {
+        t.integer("id").primary();
+        t.string("name");
+      });
+
+      await database(table).insert(tableData);
+
+      const pageSize = 2;
+      const query = database<Item>(table).select("*");
+      const paginateConfig: PaginateConfig = {
+        cursorColumn: "id",
+        order,
+        orderByColumn: "name",
+        pageSize,
+      };
+      const paginator = new Paginator(query.clone(), paginateConfig);
+      const referenceData = await paginate(query.clone(), {
+        ...paginateConfig,
+        pageSize: 4,
+      });
+
+      let referenceCursor = 0;
+
+      const movePage = async (direction: "next" | "previous") => {
+        let page = [] as Item[];
+        if (direction === "next") {
+          page = await paginator.next();
+        } else {
+          page = await paginator.previous();
+          referenceCursor -= pageSize * 2;
+        }
+
+        // check page against reference data
+        for (let i = 0; i < pageSize; i++) {
+          expect(page[i].id).toBe(referenceData[referenceCursor].id);
+          referenceCursor += 1;
+        }
+      };
+
+      await movePage("next");
+      await movePage("next");
+      await movePage("previous");
+      await movePage("next");
+      await movePage("previous");
+    } finally {
+      await database.schema.dropTable(table);
     }
   });
 }
@@ -81,10 +108,11 @@ describe("Pagination", () => {
 
   afterAll(() => database.destroy());
 
-  const tables = ["users", "users_same", "users_split3"];
+  const data = getData(["a", "b", "c", "d"]);
 
-  tables.forEach((t) => {
-    paging(t, "asc");
-    paging(t, "desc");
-  });
+  for (let iteration = 0; iteration < data.length; iteration++) {
+    const tableData = data[iteration];
+    page(iteration, tableData, "asc");
+    page(iteration, tableData, "desc");
+  }
 });

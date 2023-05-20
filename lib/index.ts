@@ -47,6 +47,8 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
         : this.config
     );
 
+    if (!results?.length) return [];
+
     if (previous) {
       results.sort((a, b) => {
         const [first, second] = order === "asc" ? [a, b] : [b, a];
@@ -74,9 +76,9 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
 
     const length = results.length;
     Object.assign(this.config, {
-      tailCursor: results[0][cursorColumn],
       cursor: results[length - 1][cursorColumn],
       orderByValue: results[length - 1][orderByColumn],
+      tailCursor: results[0][cursorColumn],
       tailOrderByValue: results[0][orderByColumn],
     });
 
@@ -87,7 +89,6 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     return this.exec();
   }
 
-  // TODO: handle going previous first.
   previous() {
     return this.exec({ previous: true });
   }
@@ -99,7 +100,7 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     };
   }
 
-  static parse(json: string) {
+  static from(json: string) {
     const { config, query } = JSON.parse(json);
     return new Paginator(config, query);
   }
@@ -123,7 +124,7 @@ function paginate<TRecord, TResult>(
   // TODO: make sorting optional
   return query
     .modify((_qb) => {
-      if (cursor && orderByValue) {
+      if (cursor !== undefined && orderByValue !== undefined) {
         _qb
           .where(orderByColumn, order === "asc" ? ">=" : "<=", orderByValue)
           .andWhereNot((_andWhereNot) => {

@@ -8,5 +8,3 @@ services:
       MYSQL_DATABASE: test_pagination_db
     ports:
       - 5010:3306
-    volumes:
-      - ./test/seed/mysql.sql:/docker-entrypoint-initdb.d/seed.sql
