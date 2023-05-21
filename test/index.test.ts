@@ -42,22 +42,17 @@ async function initTable(table: string, tableData: Item[]) {
 async function testPaging(
   iteration: number,
   tableData: Item[],
-  order: "asc" | "desc"
+  paginateConfig: PaginateConfig
 ) {
+  const order = paginateConfig.order;
+
   return test(`paging ${JSON.stringify(tableData)} on ${order}`, async () => {
     const table = `table_${iteration}_${order}`;
     try {
       await initTable(table, tableData);
 
-      const pageSize = 2;
+      const pageSize = paginateConfig.pageSize;
       const query = database<Item>(table).select("*");
-      const paginateConfig: PaginateConfig = {
-        cursorColumn: "id",
-        order,
-        orderByColumn: "name",
-        pageSize,
-      };
-
       let paginator = new Paginator(query.clone(), paginateConfig);
       const referenceData = await paginate(query.clone(), {
         ...paginateConfig,
@@ -159,11 +154,23 @@ describe("Pagination", () => {
 
   const data = getData(["a", "b", "c", "d"]);
 
+  const paginateConfig: PaginateConfig = {
+    cursorColumn: "id",
+    order: "asc",
+    orderByColumn: "name",
+    pageSize: 2,
+  };
+
   for (let iteration = 0; iteration < data.length; iteration++) {
     const tableData = data[iteration];
-    testPaging(iteration, tableData, "asc");
-    testPaging(iteration, tableData, "desc");
+    testPaging(iteration, tableData, paginateConfig);
+    testPaging(iteration, tableData, { ...paginateConfig, order: "desc" });
   }
+
+  paginateConfig.orderByColumn = undefined;
+
+  testPaging(data.length, data[0], paginateConfig);
+  testPaging(data.length, data[0], { ...paginateConfig, order: "desc" });
 
   testOutOfBounds();
 });

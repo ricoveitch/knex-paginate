@@ -1,10 +1,12 @@
 import { Knex } from "knex";
 
+const TAG = "knex-paginator";
+
 interface PaginateConfig {
   cursorColumn: string;
-  orderByColumn: string;
   order: "asc" | "desc";
   pageSize: number;
+  orderByColumn?: string;
   orderByValue?: string;
   cursor?: string;
   pageOffset?: number;
@@ -53,12 +55,14 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
       results.sort((a, b) => {
         const [first, second] = order === "asc" ? [a, b] : [b, a];
 
-        if (first[orderByColumn] < second[orderByColumn]) {
-          return -1;
-        }
+        if (orderByColumn) {
+          if (first[orderByColumn] < second[orderByColumn]) {
+            return -1;
+          }
 
-        if (first[orderByColumn] > second[orderByColumn]) {
-          return 1;
+          if (first[orderByColumn] > second[orderByColumn]) {
+            return 1;
+          }
         }
 
         if (first[cursorColumn] < second[cursorColumn]) {
@@ -69,7 +73,7 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
           return 1;
         }
 
-        console.warn("Pagination: Duplicate values found in results.");
+        console.warn(`${TAG}: Duplicate values found in results.`);
         return 0;
       });
     }
@@ -120,11 +124,17 @@ function paginate<TRecord, TResult>(
     pageOffset,
   } = config;
 
-  // TODO: error handling for cursor && orderByValue
-  // TODO: make sorting optional
   return query
     .modify((_qb) => {
-      if (cursor != null && orderByValue != null) {
+      if (cursor == null && orderByValue == null) return;
+
+      if (cursor == null) {
+        throw new Error(`${TAG}: no cursor provided (${cursor})`);
+      }
+
+      if (orderByValue == null) {
+        _qb.where(cursorColumn, order === "asc" ? ">" : "<", cursor);
+      } else {
         _qb
           .where(orderByColumn, order === "asc" ? ">=" : "<=", orderByValue)
           .andWhereNot((_andWhereNot) => {
@@ -134,16 +144,22 @@ function paginate<TRecord, TResult>(
           });
       }
     })
-    .orderBy([
-      {
-        column: orderByColumn,
-        order: order,
-      },
-      {
-        column: cursorColumn,
-        order: order,
-      },
-    ])
+    .modify((_qb) => {
+      const orderByClause = [
+        {
+          column: cursorColumn,
+          order: order,
+        },
+      ];
+
+      if (orderByColumn) {
+        orderByClause.unshift({
+          column: orderByColumn,
+          order: order,
+        });
+      }
+      _qb.orderBy(orderByClause);
+    })
     .limit(pageSize)
     .modify((_qb) => {
       if (pageOffset) {
