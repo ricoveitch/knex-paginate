@@ -27,8 +27,8 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     query: Knex.QueryBuilder<TRecord, TResult>,
     config: PaginateConfig
   ) {
-    this.config = config;
-    this.initialQuery = query;
+    this.config = { ...config };
+    this.initialQuery = query.clone();
   }
 
   private async exec(opts: ExecOptions = {}) {
@@ -94,15 +94,15 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
   }
 
   toJSON() {
-    return {
-      config: this.config,
-      query: this.initialQuery.clone().toSQL(),
-    };
+    return this.config;
   }
 
-  static from(json: string) {
-    const { config, query } = JSON.parse(json);
-    return new Paginator(config, query);
+  static load<TRecord, TResult extends NonNullable<unknown>>(
+    query: Knex.QueryBuilder<TRecord, TResult>,
+    json: string
+  ) {
+    const config: PaginateConfig = JSON.parse(json);
+    return new Paginator(query, config);
   }
 }
 
@@ -124,7 +124,7 @@ function paginate<TRecord, TResult>(
   // TODO: make sorting optional
   return query
     .modify((_qb) => {
-      if (cursor !== undefined && orderByValue !== undefined) {
+      if (cursor != null && orderByValue != null) {
         _qb
           .where(orderByColumn, order === "asc" ? ">=" : "<=", orderByValue)
           .andWhereNot((_andWhereNot) => {
