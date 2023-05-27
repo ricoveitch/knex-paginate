@@ -13,6 +13,8 @@ interface PaginateConfig {
 }
 
 interface PaginatorConfig extends PaginateConfig {
+  orderByColumnName: string;
+  cursorColumnName: string;
   tailCursor?: string;
   tailOrderByValue?: string;
 }
@@ -28,14 +30,55 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
   constructor(
     query: Knex.QueryBuilder<TRecord, TResult>,
     config: PaginateConfig
+  );
+  constructor(query: Knex.QueryBuilder<TRecord, TResult>, json: string);
+  constructor(
+    query: Knex.QueryBuilder<TRecord, TResult>,
+    config: PaginateConfig | string
   ) {
-    this.config = { ...config };
     this.initialQuery = query.clone();
+
+    if (typeof config === "string") {
+      this.config = JSON.parse(config);
+      return;
+    }
+
+    const splitColumnDetails = (column: string) => {
+      if (!column) return [null, null];
+
+      // If using a column alias
+      const splitAlias = column.split(/[ ]+[aA][sS][ ]+/);
+      if (splitAlias.length === 2) return splitAlias;
+
+      // If using a table alias
+      const columnWithTableAlias = column.split(".");
+      if (columnWithTableAlias.length === 2) {
+        return [column, columnWithTableAlias[1]];
+      }
+
+      // If only using a column name
+      return [column, column];
+    };
+
+    const [orderByColumn, orderByColumnName] = splitColumnDetails(
+      config.orderByColumn
+    );
+    const [cursorColumn, cursorColumnName] = splitColumnDetails(
+      config.cursorColumn
+    );
+
+    this.config = {
+      ...config,
+      orderByColumnName,
+      orderByColumn,
+      cursorColumnName,
+      cursorColumn,
+    };
   }
 
   private async exec(opts: ExecOptions = {}) {
     const { previous } = opts;
-    const { cursorColumn, orderByColumn, order } = this.config;
+    const { order, cursorColumnName, orderByColumnName } = this.config;
 
     const results = await paginate(
       this.initialQuery.clone(),
@@ -55,21 +98,21 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
       results.sort((a, b) => {
         const [first, second] = order === "asc" ? [a, b] : [b, a];
 
-        if (orderByColumn) {
-          if (first[orderByColumn] < second[orderByColumn]) {
+        if (orderByColumnName) {
+          if (first[orderByColumnName] < second[orderByColumnName]) {
             return -1;
           }
 
-          if (first[orderByColumn] > second[orderByColumn]) {
+          if (first[orderByColumnName] > second[orderByColumnName]) {
             return 1;
           }
         }
 
-        if (first[cursorColumn] < second[cursorColumn]) {
+        if (first[cursorColumnName] < second[cursorColumnName]) {
           return -1;
         }
 
-        if (first[cursorColumn] > second[cursorColumn]) {
+        if (first[cursorColumnName] > second[cursorColumnName]) {
           return 1;
         }
 
@@ -80,10 +123,10 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
 
     const length = results.length;
     Object.assign(this.config, {
-      cursor: results[length - 1][cursorColumn],
-      orderByValue: results[length - 1][orderByColumn],
-      tailCursor: results[0][cursorColumn],
-      tailOrderByValue: results[0][orderByColumn],
+      cursor: results[length - 1][cursorColumnName],
+      orderByValue: results[length - 1][orderByColumnName],
+      tailCursor: results[0][cursorColumnName],
+      tailOrderByValue: results[0][orderByColumnName],
     });
 
     return results;
@@ -97,16 +140,12 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     return this.exec({ previous: true });
   }
 
-  toJSON() {
-    return this.config;
+  public get state() {
+    return { ...this.config };
   }
 
-  static load<TRecord, TResult extends NonNullable<unknown>>(
-    query: Knex.QueryBuilder<TRecord, TResult>,
-    json: string
-  ) {
-    const config: PaginateConfig = JSON.parse(json);
-    return new Paginator(query, config);
+  toJSON() {
+    return this.state;
   }
 }
 
@@ -133,33 +172,31 @@ function paginate<TRecord, TResult>(
       }
 
       if (orderByValue == null) {
-        _qb.where(cursorColumn, order === "asc" ? ">" : "<", cursor);
+        _qb.whereRaw(
+          `${cursorColumn} ${order === "asc" ? ">" : "<"} ?`,
+          cursor
+        );
       } else {
         _qb
-          .where(orderByColumn, order === "asc" ? ">=" : "<=", orderByValue)
+          .whereRaw(
+            `${orderByColumn} ${order === "asc" ? ">=" : "<="} ?`,
+            orderByValue
+          )
           .andWhereNot((_andWhereNot) => {
             _andWhereNot
-              .where(orderByColumn, orderByValue)
-              .andWhere(cursorColumn, order === "asc" ? "<=" : ">=", cursor);
+              .whereRaw(`${orderByColumn} = ?`, orderByValue)
+              .andWhereRaw(
+                `${cursorColumn} ${order === "asc" ? "<=" : ">="} ?`,
+                cursor
+              );
           });
       }
     })
-    .modify((_qb) => {
-      const orderByClause = [
-        {
-          column: cursorColumn,
-          order: order,
-        },
-      ];
-
-      if (orderByColumn) {
-        orderByClause.unshift({
-          column: orderByColumn,
-          order: order,
-        });
-      }
-      _qb.orderBy(orderByClause);
-    })
+    .orderByRaw(
+      `${
+        orderByColumn ? `${orderByColumn} ${order}, ` : ""
+      }${cursorColumn} ${order}`
+    )
     .limit(pageSize)
     .modify((_qb) => {
       if (pageOffset) {

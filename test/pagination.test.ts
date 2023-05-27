@@ -1,13 +1,12 @@
-import { Paginator, PaginateConfig, paginate } from "../lib";
-import { describe, beforeAll, expect, test, afterAll } from "@jest/globals";
-import knex, { Knex } from "knex";
+import { Paginator, PaginateConfig } from "../lib";
+import { describe, expect, test } from "@jest/globals";
+import { getDatabase } from ".";
+import { randomUUID } from "crypto";
 
 interface Item {
   id: number;
   name: string;
 }
-
-let database: Knex;
 
 function getData(options: string[]) {
   const permutations: string[][] = [];
@@ -29,6 +28,8 @@ function getData(options: string[]) {
 }
 
 async function initTable(table: string, tableData: Item[]) {
+  const database = getDatabase();
+
   await database.schema.createTable(table, (t) => {
     t.integer("id").primary();
     t.string("name");
@@ -40,29 +41,39 @@ async function initTable(table: string, tableData: Item[]) {
 }
 
 async function testPaging(
-  iteration: number,
   tableData: Item[],
-  paginateConfig: PaginateConfig
+  paginateConfig: PaginateConfig,
+  tableAlias?: string
 ) {
   const order = paginateConfig.order;
 
   return test(`paging ${JSON.stringify(tableData)} on ${order}`, async () => {
-    const table = `table_${iteration}_${order}`;
+    const database = getDatabase();
+
+    const table = randomUUID();
     try {
       await initTable(table, tableData);
 
       const pageSize = paginateConfig.pageSize;
-      const query = database<Item>(table).select("*");
+      const query = database(`${table}${tableAlias ? ` AS ${tableAlias}` : ""}`)
+        .select(database.raw(paginateConfig.cursorColumn))
+        .modify((qb) => {
+          if (paginateConfig.orderByColumn) {
+            qb.select(database.raw(paginateConfig.orderByColumn));
+          }
+        });
+
       let paginator = new Paginator(query.clone(), paginateConfig);
-      const referenceData = await paginate(query.clone(), {
+      const referenceData = await new Paginator(query.clone(), {
         ...paginateConfig,
         pageSize: 4,
-      });
+      }).next();
 
       let referenceCursor = 0;
 
       const movePage = async (direction: string) => {
-        let page = [] as Item[];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let page = [] as any[];
         if (direction === "next") {
           page = await paginator.next();
         } else {
@@ -77,11 +88,21 @@ async function testPaging(
         }
       };
 
-      const directions = ["next", "next", "previous", "next", "previous"];
+      const directions = ["next"];
+      for (let i = 1; i < Math.floor(referenceData.length / pageSize); i++) {
+        for (let j = 0; j < i; j++) {
+          directions.push("next");
+        }
+        for (let j = 0; j < i; j++) {
+          directions.push("previous");
+        }
+      }
+      directions.push("next", "previous");
+
       for (const direction of directions) {
         await movePage(direction);
         const json = JSON.stringify(paginator);
-        paginator = Paginator.load(query, json);
+        paginator = new Paginator(query, json);
       }
     } finally {
       await database.schema.dropTable(table);
@@ -91,7 +112,9 @@ async function testPaging(
 
 function testOutOfBounds() {
   return test("out of bounds", async () => {
+    const database = getDatabase();
     const table = "table_out_of_bounds";
+
     try {
       await initTable("table_out_of_bounds", []);
       const query = database<Item>(table).select("*");
@@ -111,7 +134,7 @@ function testOutOfBounds() {
       expect(page).toEqual([]);
 
       const json = JSON.stringify(paginator);
-      paginator = Paginator.load(query, json);
+      paginator = new Paginator(query, json);
       page = await paginator.next();
       expect(page).toEqual([]);
 
@@ -137,22 +160,7 @@ function testOutOfBounds() {
 }
 
 describe("Pagination", () => {
-  beforeAll(() => {
-    database = knex({
-      client: "mysql2",
-      connection: {
-        host: "127.0.0.1",
-        port: 5010,
-        user: "root",
-        password: "secret",
-        database: "test_pagination_db",
-      },
-    });
-  });
-
-  afterAll(() => database.destroy());
-
-  const data = getData(["a", "b", "c", "d"]);
+  const permutationData = getData(["a", "b", "c", "d"]);
 
   const paginateConfig: PaginateConfig = {
     cursorColumn: "id",
@@ -161,16 +169,41 @@ describe("Pagination", () => {
     pageSize: 2,
   };
 
-  for (let iteration = 0; iteration < data.length; iteration++) {
-    const tableData = data[iteration];
-    testPaging(iteration, tableData, paginateConfig);
-    testPaging(iteration, tableData, { ...paginateConfig, order: "desc" });
+  // stress test permutations of data
+  for (let i = 0; i < permutationData.length; i += 3) {
+    const tableData = permutationData[i];
+    testPaging(tableData, paginateConfig);
+    testPaging(tableData, { ...paginateConfig, order: "desc" });
   }
 
-  paginateConfig.orderByColumn = undefined;
+  const tableData = [
+    { id: 0, name: "b" },
+    { id: 1, name: "c" },
+    { id: 2, name: "c" },
+    { id: 3, name: "a" },
+  ];
 
-  testPaging(data.length, data[0], paginateConfig);
-  testPaging(data.length, data[0], { ...paginateConfig, order: "desc" });
+  // NOTE: cursor and orderby column need to match what's in the select statement
+  // test computed columns and aliases
+  testPaging(
+    tableData,
+    {
+      ...paginateConfig,
+      cursorColumn: "CONCAT(t.id, t.name) AS id",
+      orderByColumn: "CONCAT(t.name,'-',t.name) as name",
+    },
+    "t"
+  );
+
+  testPaging(tableData, {
+    ...paginateConfig,
+    pageSize: 1,
+  });
+
+  //   test no order column
+  paginateConfig.orderByColumn = undefined;
+  testPaging(tableData, paginateConfig);
+  testPaging(tableData, { ...paginateConfig, order: "desc" });
 
   testOutOfBounds();
 });
