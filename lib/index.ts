@@ -1,6 +1,6 @@
 import { Knex } from "knex";
 
-const TAG = "knex-paginator";
+const TAG = "knex-paginate";
 
 interface PaginateConfig {
   cursorColumn: string;

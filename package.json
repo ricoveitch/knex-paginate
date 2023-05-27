@@ -1,5 +1,5 @@
 {
-  "name": "paginate-db",
+  "name": "knex-paginate",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
