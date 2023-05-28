@@ -1,17 +1,17 @@
 # knex-paginate
 
-Cursor pagination for a [knex](https://www.npmjs.com/package/knex) query.
+Cursor based pagination for a [knex](https://www.npmjs.com/package/knex) query.
 
 ## Installation
 
 ```sh
-npm i knex-paginate
+npm i knex-cursor-paginator
 ```
 
 ## Usage
 
 ```ts
-import { Paginator } from "knex-paginate";
+import { Paginator } from "knex-cursor-paginator";
 import { knex } from "knex";
 
 const database = knex({/*connection config*/});
@@ -38,7 +38,7 @@ const firstPageAgain = await paginator.previous();
 The `cursorColumn` and `orderByColumn` column need to correspond to a field in the select statement, for example:
 
 ```ts
-import { PaginateConfig } from "knex-paginate";
+import { PaginateConfig } from "knex-cursor-paginator";
 
 const query = database("users").select("id", "name")
 

@@ -1,5 +1,5 @@
 {
-  "name": "knex-paginate",
+  "name": "knex-cursor-paginator",
   "version": "1.0.0",
   "repository": {
     "type": "git",
@@ -19,7 +19,8 @@
   "keywords": [
     "knex",
     "paginate",
-    "pagination"
+    "pagination",
+    "cursor pagination"
   ],
   "author": "Rico Veitch",
   "license": "MIT",
