@@ -116,7 +116,7 @@ function testOutOfBounds() {
     const table = "table_out_of_bounds";
 
     try {
-      await initTable("table_out_of_bounds", []);
+      await initTable(table, []);
       const query = database<Item>(table).select("*");
       const paginateConfig: PaginateConfig = {
         cursorColumn: "id",
@@ -152,6 +152,37 @@ function testOutOfBounds() {
       expect(page[0].id).toEqual(3);
 
       page = await paginator.previous();
+      expect(page[0].id).toEqual(1);
+    } finally {
+      await database.schema.dropTable(table);
+    }
+  });
+}
+
+function testOffset() {
+  return test("page offset", async () => {
+    const database = getDatabase();
+    const table = "table_with_offset";
+
+    try {
+      await initTable(table, [
+        { id: 1, name: "b" },
+        { id: 2, name: "b" },
+        { id: 3, name: "b" },
+      ]);
+      const query = database<Item>(table).select("*");
+      const paginateConfig: PaginateConfig = {
+        cursorColumn: "id",
+        order: "asc",
+        pageSize: 1,
+      };
+
+      const paginator = new Paginator(query.clone(), paginateConfig);
+
+      let page = await paginator.next({ pageOffset: 2 });
+      expect(page[0].id).toEqual(3);
+
+      page = await paginator.previous({ pageOffset: 1 });
       expect(page[0].id).toEqual(1);
     } finally {
       await database.schema.dropTable(table);
@@ -206,4 +237,6 @@ describe("Pagination", () => {
   testPaging(tableData, { ...paginateConfig, order: "desc" });
 
   testOutOfBounds();
+
+  testOffset();
 });

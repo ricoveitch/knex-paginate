@@ -14,7 +14,7 @@ describe("Set config", () => {
     };
 
     const getConfig = () => {
-      return new Paginator(database("table").select("*"), paginateConfig).state;
+      return new Paginator(database("table").select("*"), paginateConfig).value;
     };
 
     let config = getConfig();

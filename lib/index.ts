@@ -2,29 +2,36 @@ import { Knex } from "knex";
 
 const TAG = "knex-paginate";
 
-interface PaginateConfig {
+interface PaginatorConfig {
   cursorColumn: string;
   order: "asc" | "desc";
   pageSize: number;
   orderByColumn?: string;
+}
+
+interface PaginateConfig extends PaginatorConfig {
   orderByValue?: string;
   cursor?: string;
   pageOffset?: number;
 }
 
-interface PaginatorConfig extends PaginateConfig {
+interface PaginatorState extends PaginateConfig {
   orderByColumnName: string;
   cursorColumnName: string;
   tailCursor?: string;
   tailOrderByValue?: string;
 }
 
-interface ExecOptions {
+interface NavigationOptions {
+  pageOffset?: number;
+}
+
+interface ExecOptions extends NavigationOptions {
   previous?: boolean;
 }
 
 class Paginator<TRecord, TResult extends NonNullable<unknown>> {
-  private config: PaginatorConfig;
+  private state: PaginatorState;
   private initialQuery: Knex.QueryBuilder<TRecord, TResult>;
 
   constructor(
@@ -39,7 +46,7 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     this.initialQuery = query.clone();
 
     if (typeof config === "string") {
-      this.config = JSON.parse(config);
+      this.state = JSON.parse(config);
       return;
     }
 
@@ -67,7 +74,7 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
       config.cursorColumn
     );
 
-    this.config = {
+    this.state = {
       ...config,
       orderByColumnName,
       orderByColumn,
@@ -79,19 +86,21 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
   private async exec(opts: ExecOptions = {}) {
     const { previous } = opts;
     const { order, cursorColumn, cursorColumnName, orderByColumnName } =
-      this.config;
+      this.state;
 
-    const results = await paginate(
-      this.initialQuery.clone(),
-      previous
-        ? {
-            ...this.config,
-            order: order === "asc" ? "desc" : "asc",
-            cursor: this.config.tailCursor,
-            orderByValue: this.config.tailOrderByValue,
-          }
-        : this.config
-    );
+    const paginateConfig: PaginateConfig = previous
+      ? {
+          ...this.state,
+          order: order === "asc" ? "desc" : "asc",
+          cursor: this.state.tailCursor,
+          orderByValue: this.state.tailOrderByValue,
+        }
+      : this.state;
+
+    const results = await paginate(this.initialQuery.clone(), {
+      ...paginateConfig,
+      pageOffset: opts.pageOffset,
+    });
 
     if (!results?.length) return [];
 
@@ -125,7 +134,7 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     }
 
     const length = results.length;
-    Object.assign(this.config, {
+    Object.assign(this.state, {
       cursor: results[length - 1][cursorColumnName],
       orderByValue: results[length - 1][orderByColumnName],
       tailCursor: results[0][cursorColumnName],
@@ -135,20 +144,22 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
     return results;
   }
 
-  next() {
-    return this.exec();
+  /** get the next page of results */
+  next(options: NavigationOptions = {}) {
+    return this.exec(options);
   }
 
-  previous() {
-    return this.exec({ previous: true });
+  /** get the previous page of results */
+  previous(options: NavigationOptions = {}) {
+    return this.exec({ ...options, previous: true });
   }
 
-  public get state() {
-    return { ...this.config };
+  public get value() {
+    return { ...this.state };
   }
 
   toJSON() {
-    return this.state;
+    return this.value;
   }
 }
 
