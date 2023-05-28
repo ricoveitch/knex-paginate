@@ -214,7 +214,6 @@ describe("Pagination", () => {
     { id: 3, name: "a" },
   ];
 
-  // NOTE: cursor and orderby column need to match what's in the select statement
   // test computed columns and aliases
   testPaging(
     tableData,

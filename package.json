@@ -16,9 +16,13 @@
     "dev": "nodemon --exec ts-node lib/index.ts",
     "build": "rm -rf dist && tsc -d"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "knex",
+    "paginate",
+    "pagination"
+  ],
+  "author": "Rico Veitch",
+  "license": "MIT",
   "devDependencies": {
     "@jest/globals": "^29.5.0",
     "@types/jest": "^29.5.1",
