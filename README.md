@@ -1,4 +1,4 @@
-# knex-paginate
+# knex-cursor-paginator
 
 Cursor based pagination for a [knex](https://www.npmjs.com/package/knex) query.
 
