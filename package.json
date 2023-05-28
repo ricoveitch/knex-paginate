@@ -1,12 +1,20 @@
 {
   "name": "knex-paginate",
   "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ricoveitch/knex-paginate"
+  },
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "typings": "dist/index.d.ts",
   "scripts": {
     "test": "jest test",
     "dev": "nodemon --exec ts-node lib/index.ts",
-    "build": "tsc --project ./"
+    "build": "rm -rf dist && tsc -d"
   },
   "keywords": [],
   "author": "",

@@ -78,7 +78,8 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
 
   private async exec(opts: ExecOptions = {}) {
     const { previous } = opts;
-    const { order, cursorColumnName, orderByColumnName } = this.config;
+    const { order, cursorColumn, cursorColumnName, orderByColumnName } =
+      this.config;
 
     const results = await paginate(
       this.initialQuery.clone(),
@@ -116,7 +117,9 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
           return 1;
         }
 
-        console.warn(`${TAG}: Duplicate values found in results.`);
+        console.warn(
+          `${TAG}: ${cursorColumn} is not unique, cursorColumn must be unique to page correctly.`
+        );
         return 0;
       });
     }
