@@ -214,17 +214,6 @@ describe("Pagination", () => {
     { id: 3, name: "a" },
   ];
 
-  // test computed columns and aliases
-  testPaging(
-    tableData,
-    {
-      ...paginateConfig,
-      cursorColumn: "CONCAT(t.id, t.name) AS id",
-      orderByColumn: "CONCAT(t.name,'-',t.name) as name",
-    },
-    "t"
-  );
-
   testPaging(tableData, {
     ...paginateConfig,
     pageSize: 1,

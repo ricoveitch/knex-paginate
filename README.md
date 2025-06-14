@@ -97,11 +97,11 @@ const config: PaginateConfig = {
 #### With column alias
 
 ```ts
-const query = database("users").select("id", "CONCAT(firstName, lastName) as name")
+const query = database("users").select("id", "firstName as name")
 
 const config: PaginateConfig = {
     cursorColumn: "id",
-    orderByColumn: "CONCAT(firstName, lastName) as name",
+    orderByColumn: "firstName as name",
     order: "asc",
     pageSize: 10
 }

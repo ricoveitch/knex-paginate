@@ -163,6 +163,16 @@ class Paginator<TRecord, TResult extends NonNullable<unknown>> {
   }
 }
 
+function getOrder(order: string) {
+  switch (order) {
+   case "asc":
+   case "desc":
+    return order
+    default:
+      return null
+  }
+}
+
 function paginate<TRecord, TResult>(
   query: Knex.QueryBuilder<TRecord, TResult>,
   config: PaginateConfig
@@ -170,12 +180,13 @@ function paginate<TRecord, TResult>(
   const {
     cursor,
     cursorColumn,
-    order,
     orderByColumn,
     pageSize,
     orderByValue,
     pageOffset,
   } = config;
+
+  const order = getOrder(config.order)
 
   return query
     .modify((_qb) => {
@@ -187,30 +198,40 @@ function paginate<TRecord, TResult>(
 
       if (orderByValue == null) {
         _qb.whereRaw(
-          `${cursorColumn} ${order === "asc" ? ">" : "<"} ?`,
-          cursor
+          `?? ${order === "asc" ? ">" : "<"} ?`,
+          [cursorColumn, cursor]
         );
       } else {
         _qb
           .whereRaw(
-            `${orderByColumn} ${order === "asc" ? ">=" : "<="} ?`,
-            orderByValue
+            `?? ${order === "asc" ? ">=" : "<="} ?`,
+            [orderByColumn, orderByValue]
           )
           .andWhereNot((_andWhereNot) => {
             _andWhereNot
-              .whereRaw(`${orderByColumn} = ?`, orderByValue)
+              .whereRaw("?? = ?", [orderByColumn, orderByValue])
               .andWhereRaw(
-                `${cursorColumn} ${order === "asc" ? "<=" : ">="} ?`,
-                cursor
+                `?? ${order === "asc" ? "<=" : ">="} ?`,
+                [cursorColumn, cursor]
               );
           });
       }
     })
-    .orderByRaw(
-      `${
-        orderByColumn ? `${orderByColumn} ${order}, ` : ""
-      }${cursorColumn} ${order}`
-    )
+    .modify((_qb) => {
+     if (order) {
+				const bindings = [];
+				if (orderByColumn) {
+					bindings.push(orderByColumn);
+				}
+				bindings.push(cursorColumn);
+
+				_qb.orderByRaw(
+					`${orderByColumn ? `?? ${order}, ` : ""}?? ${order}`,
+					bindings
+				);
+			}
+
+    })
     .limit(pageSize)
     .modify((_qb) => {
       if (pageOffset) {
